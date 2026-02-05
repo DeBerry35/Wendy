@@ -1,9 +1,10 @@
-from flask import Flask, jsonify
+from flask import Flask, jsonify, Response, request
 from flask_cors import CORS
 import instaloader
 from datetime import datetime
 import json
 import os
+import requests
 
 app = Flask(__name__)
 CORS(app)  # Enable CORS for frontend to connect
@@ -36,7 +37,7 @@ def get_instagram_data(username):
                 break
             recent_posts.append({
                 'id': post.shortcode,
-                'imageUrl': post.url,
+                'imageUrl': post.url,  # Store original URL for proxy
                 'caption': post.caption[:200] if post.caption else '',
                 'likes': post.likes,
                 'comments': post.comments,
@@ -114,6 +115,13 @@ def check_updates():
     # Save new state
     save_state(new_data)
     
+    # Convert image URLs to proxied URLs
+    proxied_posts = []
+    for post in new_data['recentPosts']:
+        proxied_post = post.copy()
+        proxied_post['imageUrl'] = f"{request.host_url}proxy-image?url={post['imageUrl']}"
+        proxied_posts.append(proxied_post)
+    
     # Return response
     return jsonify({
         'changed': changed,
@@ -123,9 +131,24 @@ def check_updates():
             'followers': new_data['followers'],
             'following': new_data['following'],
             'lastChecked': datetime.now().strftime('%Y-%m-%d %H:%M'),
-            'recentPosts': new_data['recentPosts']
+            'recentPosts': proxied_posts
         }
     })
+
+@app.route('/proxy-image')
+def proxy_image():
+    """Proxy endpoint to fetch Instagram images and bypass CORS"""
+    url = request.args.get('url')
+    if not url:
+        return "Missing URL", 400
+    try:
+        resp = requests.get(url, headers={
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }, timeout=10)
+        return Response(resp.content, content_type=resp.headers.get('Content-Type', 'image/jpeg'))
+    except Exception as e:
+        print(f"Failed to fetch image: {e}")
+        return "Failed to fetch image", 500
 
 @app.route('/health', methods=['GET'])
 def health():
@@ -135,4 +158,5 @@ def health():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
+
 

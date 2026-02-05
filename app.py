@@ -27,9 +27,21 @@ def get_instagram_data(username):
     """Fetch Instagram profile data using instaloader"""
     try:
         L = instaloader.Instaloader()
-        
-        # Get profile
         profile = instaloader.Profile.from_username(L.context, username)
+        
+        # Fetch recent posts (up to 6)
+        recent_posts = []
+        for i, post in enumerate(profile.get_posts()):
+            if i >= 6:
+                break
+            recent_posts.append({
+                'id': post.shortcode,
+                'imageUrl': post.url,
+                'caption': post.caption[:200] if post.caption else '',
+                'likes': post.likes,
+                'comments': post.comments,
+                'timestamp': post.date_utc.isoformat()
+            })
         
         return {
             'posts': profile.mediacount,
@@ -37,6 +49,7 @@ def get_instagram_data(username):
             'following': profile.followees,
             'biography': profile.biography,
             'full_name': profile.full_name,
+            'recentPosts': recent_posts
         }
     except Exception as e:
         print(f"Error fetching Instagram data: {e}")
@@ -55,20 +68,17 @@ def detect_changes(old_data, new_data):
     
     if new_data['followers'] > old_data['followers']:
         diff = new_data['followers'] - old_data['followers']
-        changes.append(f"Gained {diff} new {'follower' if diff == 1 else 'followers'}")
+        changes.append(f"Gained {diff} {'follower' if diff == 1 else 'followers'}")
     elif new_data['followers'] < old_data['followers']:
         diff = old_data['followers'] - new_data['followers']
         changes.append(f"Lost {diff} {'follower' if diff == 1 else 'followers'}")
     
     if new_data['following'] > old_data['following']:
         diff = new_data['following'] - old_data['following']
-        changes.append(f"Now following {diff} more {'account' if diff == 1 else 'accounts'}")
+        changes.append(f"Following {diff} more")
     elif new_data['following'] < old_data['following']:
         diff = old_data['following'] - new_data['following']
-        changes.append(f"Unfollowed {diff} {'account' if diff == 1 else 'accounts'}")
-    
-    if new_data['biography'] != old_data.get('biography', ''):
-        changes.append("Updated biography")
+        changes.append(f"Unfollowed {diff}")
     
     if changes:
         return True, " • ".join(changes)
@@ -93,7 +103,8 @@ def check_updates():
                 'posts': 'Error',
                 'followers': 'Error',
                 'following': 'Error',
-                'lastChecked': datetime.now().strftime('%Y-%m-%d %H:%M')
+                'lastChecked': datetime.now().strftime('%Y-%m-%d %H:%M'),
+                'recentPosts': []
             }
         }), 500
     
@@ -111,7 +122,8 @@ def check_updates():
             'posts': new_data['posts'],
             'followers': new_data['followers'],
             'following': new_data['following'],
-            'lastChecked': datetime.now().strftime('%Y-%m-%d %H:%M')
+            'lastChecked': datetime.now().strftime('%Y-%m-%d %H:%M'),
+            'recentPosts': new_data['recentPosts']
         }
     })
 
@@ -123,3 +135,4 @@ def health():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
+
